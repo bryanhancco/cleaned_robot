@@ -1,6 +1,5 @@
 import threading
 import time
-from connection.connection_manager import check_device, setup_adb_forward, start_socket_connection
 from typing import Optional
 
 # Módulos
@@ -141,19 +140,33 @@ def listen_socket(sock):
             break
 
 def main():
-    print("Iniciando aplicación educativa DigitalHub Perú...")
+    print("Iniciando aplicación educativa DigitalHub Perú (modo consola)...")
+    print("Introduce comandos por consola. Comandos válidos:\n  n_repaso, fg_repaso, c_repaso\n  n_salida, fg_salida, c_salida\nEscribe 'salir' o 'exit' para terminar.")
 
-    if not check_device():
-        print("Conecta un dispositivo Android con depuración USB activada y vuelve a intentar.")
-        return
+    try:
+        while True:
+            try:
+                line = input('> ')
+            except (EOFError, KeyboardInterrupt):
+                print('\nInterrupción recibida. Saliendo...')
+                break
 
-    setup_adb_forward()
-    sock = start_socket_connection()
+            if not line:
+                continue
+            cmd = line.strip()
+            if cmd.lower() in ('salir', 'exit', 'quit'):
+                print('Saliendo...')
+                break
+            handle_message(cmd)
 
-    print("Conexión establecida. Esperando comandos desde Flutter...")
-    listen_socket(sock)
-    sock.close()
-    print("Aplicación finalizada.")
+    finally:
+        # intentar detener cualquier módulo activo antes de salir
+        if active_thread is not None and active_thread.is_alive():
+            print('Deteniendo módulo activo antes de salir...')
+            if active_stop_event is not None:
+                active_stop_event.set()
+            active_thread.join(timeout=5)
+        print('Aplicación finalizada (modo consola).')
 
 if __name__ == '__main__':
     main()

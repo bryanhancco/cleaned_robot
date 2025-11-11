@@ -1,35 +1,43 @@
 import os
 import cv2
 import numpy as np
-import tensorflow as tf
 import time
+
+# Intentar importar TensorFlow pero no fallar en el import del módulo
+try:
+    import tensorflow as tf
+except Exception:
+    tf = None
 
 # Obtener ruta absoluta al archivo del modelo
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, 'mnist_cnn_model.keras')
-
-# Cargar el modelo pre-entrenado
-try:
-    model = tf.keras.models.load_model(MODEL_PATH)
-except Exception as e:
-    print(f"Error al cargar el modelo desde {MODEL_PATH}: {e}")
-    print("Asegúrate de haber entrenado y guardado el modelo correctamente.")
-    model = None
-
+MODEL_PATH = os.path.join(BASE_DIR, 'mnist_cnn_model.h5')
+# El modelo se cargará cuando se inicie run(), evitando fallos en import
+model = None
 _is_running = False  # variable global de control
+
 
 def run(stop_event=None):
     """Ejecuta el detector de números. stop_event puede detenerlo."""
-    global _is_running
+    global _is_running, model
     if _is_running:
         print("El detector ya está en ejecución. Ignorando llamada duplicada.")
         return
-    _is_running = True
+
+    # Cargar el modelo bajo demanda para que la importación del paquete no falle
+    if tf is None:
+        print("TensorFlow no está disponible en este entorno. No se puede ejecutar el detector.")
+        return
 
     if model is None:
-        print("Modelo no disponible. Abortando run().")
-        _is_running = False
-        return
+        try:
+            model = tf.keras.models.load_model(MODEL_PATH)
+        except Exception as e:
+            print(f"Error al cargar el modelo desde {MODEL_PATH}: {e}")
+            print("Asegúrate de tener el archivo de modelo y de que TensorFlow esté instalado.")
+            return
+
+    _is_running = True
 
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
@@ -124,9 +132,17 @@ def run(stop_event=None):
         print("Error en numbers.run():", e)
 
     finally:
+        # Asegurar que el flag se limpia aunque la función termine temprano
         _is_running = False
-        cap.release()
-        cv2.destroyAllWindows()
+        try:
+            cap.release()
+        except Exception:
+            pass
+        time.sleep(0.2)
+        try:
+            cv2.destroyAllWindows()
+        except Exception:
+            pass
         print("numbers.run() finalizado.")
 
 
