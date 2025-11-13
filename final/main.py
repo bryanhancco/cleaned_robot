@@ -5,28 +5,37 @@ from typing import Optional
 
 # Módulos
 try:
-    from features.number_recognition import numbers as numbers_mod
+    from features.number_recognition import numbers_repaso as numbers_repaso_mod
+    from features.number_recognition import numbers_practica as numbers_practica_mod
 except Exception:
-    numbers_mod = None
+    numbers_repaso_mod = None
+    numbers_practica_mod = None
 
 try:
-    from features.figures_recognition import recognize_figures as figures_mod
+    from features.figures_recognition import figures_practica as figures_practica_mod
 except Exception:
     figures_mod = None
 
 try:
-    from features.color_recognition import color as color_mod
+    from features.color_recognition import color_repaso as color_mod
 except Exception:
     color_mod = None
+
+try:
+    from features.direction_recognition import direction_practica as direction_practica_mod
+except Exception:
+    direction_practica_mod = None
 
 active_thread: Optional[threading.Thread] = None
 active_stop_event: Optional[threading.Event] = None
 active_name: Optional[str] = None
+# socket
+sock: Optional[object] = None
 # registro de tiempos para evitar reintentos rápidos
 _last_start_time: dict = {}
 
 def start_module(name: str):
-    global active_thread, active_stop_event, active_name
+    global active_thread, active_stop_event, active_name, sock
 
     # Evitar múltiples hilos
     if active_thread is not None and active_thread.is_alive():
@@ -44,23 +53,28 @@ def start_module(name: str):
 
     # Seleccionar módulo y función
     module_obj = None
-    if name == 'n' and numbers_mod is not None:
-        module_obj = numbers_mod
-    elif name == 'fg' and figures_mod is not None:
-        module_obj = figures_mod
+    if name == 'n_repaso' and numbers_repaso_mod is not None:
+        module_obj = numbers_repaso_mod
+        target = getattr(module_obj, 'run', None)
+    elif name == 'n_practica' and numbers_practica_mod is not None:
+        module_obj = numbers_practica_mod
+        target = getattr(module_obj, 'run_interactive', None) or getattr(module_obj, 'run', None)
+    elif name == 'fg_practica' and figures_practica_mod is not None:
+        module_obj = figures_practica_mod
+        target = getattr(module_obj, 'run', None) or getattr(module_obj, 'main', None)
+    elif name == 'd_practica' and direction_practica_mod is not None:
+        module_obj = direction_practica_mod
+        target = getattr(module_obj, 'run', None) or getattr(module_obj, 'jugar_direcciones', None)
     elif name == 'c' and color_mod is not None:
         module_obj = color_mod
+        target = getattr(module_obj, 'run', None) or getattr(module_obj, 'main', None)
     else:
-        print(f"Módulo '{name}' no disponible.")
+        print(f"Módulo '{name}' no disponible o no importado correctamente.")
         return
 
-    # comprobar si el módulo ya tiene un flag de ejecución
     if getattr(module_obj, '_is_running', False):
         print(f"El módulo {name} ya está corriendo (flag interno). No se iniciará otro.")
         return
-
-    # obtener la función ejecutable preferida
-    target = getattr(module_obj, 'run', None) or getattr(module_obj, 'main', None)
 
     if target is None:
         print(f"El módulo '{name}' no tiene función ejecutable.")
@@ -69,9 +83,13 @@ def start_module(name: str):
     def runner():
         try:
             try:
-                target(stop_ev)
+                # 🔥 ahora sí socket_conn tendrá el valor global correcto
+                target(stop_ev, sock)
             except TypeError:
-                target()
+                try:
+                    target(stop_ev)
+                except TypeError:
+                    target()
         except Exception as e:
             print(f"Error en módulo {name}: {e}")
 
@@ -97,6 +115,7 @@ def stop_active_module(name: str):
 
     if active_stop_event is not None:
         active_stop_event.set()
+    
     active_thread.join(timeout=5)
     if active_thread.is_alive():
         print("El módulo no se detuvo dentro del tiempo esperado.")
@@ -112,9 +131,13 @@ def handle_message(message: str):
     print(f"Comando recibido: {message}")
 
     if message == 'n_repaso':
-        start_module('n')
-    elif message == 'fg_repaso':
-        start_module('fg')
+        start_module('n_repaso')
+    elif message == 'n_practica':
+        start_module('n_practica')
+    elif message == 'fg_practica':
+        start_module('fg_practica')
+    elif message == 'd_practica':
+        start_module('d_practica')
     elif message == 'c_repaso':
         start_module('c')
     elif message == 'n_salida':
@@ -123,6 +146,8 @@ def handle_message(message: str):
         stop_active_module('fg')
     elif message == 'c_salida':
         stop_active_module('c')
+    elif message == 'd_salida':
+        stop_active_module('d_practica')
     else:
         print(f"Comando desconocido: {message}")
 
@@ -148,6 +173,7 @@ def main():
         return
 
     setup_adb_forward()
+    global sock
     sock = start_socket_connection()
 
     print("Conexión establecida. Esperando comandos desde Flutter...")
