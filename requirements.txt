@@ -28,3 +28,5 @@ mediapipe==0.10.18
 # installing it separately in an isolated env or adjust numpy/opencv pins.
 
 # Optional: if you prefer headless OpenCV (no GUI), replace opencv-python with opencv-python-headless
+#opencv-python-headless==4.9.0.80
+lgpio
